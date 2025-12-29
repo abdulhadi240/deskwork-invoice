@@ -122,8 +122,8 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     col_activity = left_margin + 100
     col_reference = left_margin + 170
     col_due_date = left_margin + 260
-    col_invoice_amt = left_margin + 360
-    col_balance = left_margin + 440
+    col_invoice_amt = left_margin + 390
+    col_balance = left_margin + 460
     
     # Draw table headers
     c.setFont("Helvetica-Bold", 9)
@@ -227,11 +227,17 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     # ============ PAYMENT DETAILS TABLE ============
     y -= 35
     
+ 
+    
     # Customer row
     c.setFont("Helvetica-Bold", 9)
     c.drawString(320, y, "Customer")
     c.setFont("Helvetica", 9)
     c.drawString(440, y, data.company_name)
+    
+    y -= 5
+    # Line after Customer
+    c.line(320, y, width - right_margin, y)
     
     y -= 13  
     # Overdue, Current, Total row (all on one line)
