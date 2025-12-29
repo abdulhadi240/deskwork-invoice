@@ -34,7 +34,7 @@ class InvoiceItem(BaseModel):
     date: date
     activity: str  # URL for the invoice link
     reference: str  # Display text for the link (anchor tag)
-    due_date: date
+    due_date: str
     invoice_amount: Decimal = Field(ge=0)
     payments: Decimal = Field(default=Decimal("0.00"), ge=0)  # Kept in model but not displayed
     
@@ -51,8 +51,8 @@ class InvoiceItem(BaseModel):
 class StatementRequest(BaseModel):
     client_name: str = Field(..., min_length=1, max_length=200)
     company_name: str = Field(..., min_length=1, max_length=200)
-    from_date: date
-    to_date: date
+    from_date: str
+    to_date: str
     invoices: List[InvoiceItem] = Field(..., min_items=1)
     
     @validator('to_date')
