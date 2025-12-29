@@ -32,8 +32,9 @@ app.add_middleware(
 # Pydantic Models
 class InvoiceItem(BaseModel):
     date: str
-    activity: str  # URL for the invoice link
-    reference: str  # Display text for the link (anchor tag)
+    activity: str  # Display text for the activity
+    invoice_url: str  # URL for the invoice link
+    reference: str  # Reference number/text
     due_date: str
     invoice_amount: Decimal = Field(ge=0)
     payments: Decimal = Field(default=Decimal("0.00"), ge=0)
@@ -88,7 +89,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     # ============ HEADER SECTION ============
     # Title "STATEMENT - Activity"
     c.setFont("Helvetica", 22)
-    c.drawString(left_margin, y, "OVERDUE STATEMENT")
+    c.drawString(left_margin, y, "OVER DUE STATEMENT")
     
     # Right side header info
     c.setFont("Helvetica-Bold", 9)
@@ -116,20 +117,22 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     # ============ TABLE SECTION ============
     y = height - 165
     
-    # Table column positions (without Reference and Payments columns)
+    # Table column positions
     col_date = left_margin
-    col_activity = left_margin + 105
+    col_activity = left_margin + 75
+    col_reference = left_margin + 150
     col_due_date = left_margin + 240
-    col_invoice_amt = left_margin + 360
-    col_balance = left_margin + 465
+    col_invoice_amt = left_margin + 340
+    col_balance = left_margin + 440
     
     # Draw table headers
     c.setFont("Helvetica-Bold", 9)
     c.drawString(col_date, y, "Date")
     c.drawString(col_activity, y, "Activity")
+    c.drawString(col_reference, y, "Reference")
     c.drawString(col_due_date, y, "Due Date")
-    c.drawRightString(col_invoice_amt + 50, y, "Invoice Amount")
-    c.drawRightString(col_balance + 50, y, "Balance AUD")
+    c.drawRightString(col_invoice_amt + 40, y, "Invoice Amount")
+    c.drawRightString(col_balance + 40, y, "Balance AUD")
     
     # Line under headers
     y -= 3
@@ -139,7 +142,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     # Calculate running balance
     running_balance = Decimal("0.00")
-        
+    
     # ============ INVOICE ROWS ============
     for invoice in data.invoices:
         y -= 15
@@ -151,28 +154,31 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
         # Date
         c.drawString(col_date, y, invoice.date)
         
-        # Activity - Display reference as clickable blue link
+        # Activity - Display activity text as clickable blue link
         c.setFillColor(blue_link)
-        c.drawString(col_activity, y, invoice.reference)
+        c.drawString(col_activity, y, invoice.activity)
         
-        # Create clickable link area
-        link_width = c.stringWidth(invoice.reference, "Helvetica", 9)
+        # Create clickable link area using invoice_url
+        link_width = c.stringWidth(invoice.activity, "Helvetica", 9)
         c.linkURL(
-            invoice.activity, 
+            invoice.invoice_url, 
             (col_activity, y - 2, col_activity + link_width, y + 10),
             relative=0
         )
         
         c.setFillColor(colors.black)
         
+        # Reference column
+        c.drawString(col_reference, y, invoice.reference)
+        
         # Due Date
         c.drawString(col_due_date, y, invoice.due_date)
         
         # Invoice Amount
-        c.drawRightString(col_invoice_amt + 50, y, f"{invoice.invoice_amount:,.2f}")
+        c.drawRightString(col_invoice_amt + 40, y, f"{invoice.invoice_amount:,.2f}")
         
         # Balance
-        c.drawRightString(col_balance + 50, y, f"{running_balance:,.2f}")
+        c.drawRightString(col_balance + 40, y, f"{running_balance:,.2f}")
         
         # Light gray line
         y -= 3
@@ -221,6 +227,11 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     # ============ PAYMENT DETAILS TABLE ============
     y -= 35
     
+    # Top line before Customer
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.5)
+    c.setDash([])
+    c.line(320, y + 5, width - right_margin, y + 5)
     
     # Customer row
     c.setFont("Helvetica-Bold", 9)
@@ -228,12 +239,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     c.setFont("Helvetica", 9)
     c.drawString(440, y, data.company_name)
     
-    y -= 5
-    # Line after Customer
-    c.line(320, y, width - right_margin, y)
-    
-    y -= 13
-    
+    y -= 13  
     # Overdue, Current, Total row (all on one line)
     c.setFont("Helvetica-Bold", 9)
     c.drawString(320, y, "Overdue")
@@ -255,7 +261,6 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     # Amount Enclosed
     c.setFont("Helvetica-Bold", 9)
     c.drawString(320, y, "Amount Enclosed")
-    
     
     # Save PDF
     c.save()
@@ -290,8 +295,9 @@ async def generate_statement(request: StatementRequest):
     - **to_date**: End date of the statement period (as string)
     - **invoices**: List of invoice items where:
         - **date**: Invoice date (as string)
-        - **activity**: URL for the invoice link
-        - **reference**: Display text for the link (e.g., "INV 110")
+        - **activity**: Display text for the activity (will be shown as clickable link)
+        - **invoice_url**: URL for the invoice link
+        - **reference**: Reference number/text
         - **due_date**: Payment due date (as string)
         - **invoice_amount**: Invoice amount
         - **payments**: Payments made (optional, defaults to 0)
