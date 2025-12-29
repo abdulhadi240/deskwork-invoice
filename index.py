@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional
-from datetime import datetime, date
+from typing import List
+from datetime import datetime
 from decimal import Decimal
 import io
 from reportlab.lib import colors
@@ -31,12 +31,12 @@ app.add_middleware(
 
 # Pydantic Models
 class InvoiceItem(BaseModel):
-    date: date
+    date: str
     activity: str  # URL for the invoice link
     reference: str  # Display text for the link (anchor tag)
     due_date: str
     invoice_amount: Decimal = Field(ge=0)
-    payments: Decimal = Field(default=Decimal("0.00"), ge=0)  # Kept in model but not displayed
+    payments: Decimal = Field(default=Decimal("0.00"), ge=0)
     
     @validator('invoice_amount', 'payments')
     def round_decimal(cls, v):
@@ -44,8 +44,7 @@ class InvoiceItem(BaseModel):
     
     class Config:
         json_encoders = {
-            Decimal: lambda v: float(v),
-            date: lambda v: v.isoformat()
+            Decimal: lambda v: float(v)
         }
 
 class StatementRequest(BaseModel):
@@ -55,16 +54,9 @@ class StatementRequest(BaseModel):
     to_date: str
     invoices: List[InvoiceItem] = Field(..., min_items=1)
     
-    @validator('to_date')
-    def validate_dates(cls, v, values):
-        if 'from_date' in values and v < values['from_date']:
-            raise ValueError('to_date must be after from_date')
-        return v
-    
     class Config:
         json_encoders = {
-            Decimal: lambda v: float(v),
-            date: lambda v: v.isoformat()
+            Decimal: lambda v: float(v)
         }
 
 class StatementResponse(BaseModel):
@@ -106,7 +98,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     y -= 15
     c.setFont("Helvetica", 9)
-    c.drawString(360, y, data.from_date.strftime("%d %b %Y"))
+    c.drawString(360, y, data.from_date)
     
     y -= 13
     c.setFont("Helvetica-Bold", 9)
@@ -114,7 +106,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     y -= 15
     c.setFont("Helvetica", 9)
-    c.drawString(360, y, data.to_date.strftime("%d %b %Y"))
+    c.drawString(360, y, data.to_date)
     
     # Company name below title
     y = height - 105
@@ -126,8 +118,8 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     # Table column positions (without Reference and Payments columns)
     col_date = left_margin
-    col_activity = left_margin + 75
-    col_due_date = left_margin + 270
+    col_activity = left_margin + 105
+    col_due_date = left_margin + 240
     col_invoice_amt = left_margin + 360
     col_balance = left_margin + 465
     
@@ -147,8 +139,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     # Calculate running balance
     running_balance = Decimal("0.00")
-    
-    
+        
     # ============ INVOICE ROWS ============
     for invoice in data.invoices:
         y -= 15
@@ -158,7 +149,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
         c.setFillColor(colors.black)
         
         # Date
-        c.drawString(col_date, y, invoice.date.strftime("%d %b %Y"))
+        c.drawString(col_date, y, invoice.date)
         
         # Activity - Display reference as clickable blue link
         c.setFillColor(blue_link)
@@ -174,8 +165,8 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
         
         c.setFillColor(colors.black)
         
-        # Due Date (single line: "14 Dec 2025")
-        c.drawString(col_due_date, y, invoice.due_date.strftime("%d %b %Y"))
+        # Due Date
+        c.drawString(col_due_date, y, invoice.due_date)
         
         # Invoice Amount
         c.drawRightString(col_invoice_amt + 50, y, f"{invoice.invoice_amount:,.2f}")
@@ -219,20 +210,17 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     c.drawString(left_margin, y, f"To: {data.client_name}")
     
     # Calculate overdue and current
-    today = date.today()
-    overdue = sum(
-        (inv.invoice_amount - inv.payments) 
-        for inv in data.invoices 
-        if inv.due_date < today
-    )
-    current = sum(
-        (inv.invoice_amount - inv.payments) 
-        for inv in data.invoices 
-        if inv.due_date >= today
-    )
+    overdue = Decimal("0.00")
+    current = Decimal("0.00")
+    
+    # Sum all invoices as overdue
+    for inv in data.invoices:
+        balance = inv.invoice_amount - inv.payments
+        overdue += balance
     
     # ============ PAYMENT DETAILS TABLE ============
     y -= 35
+    
     
     # Customer row
     c.setFont("Helvetica-Bold", 9)
@@ -268,11 +256,6 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     c.setFont("Helvetica-Bold", 9)
     c.drawString(320, y, "Amount Enclosed")
     
-    y -= 5
-    # Line after Amount Enclosed
-    c.line(320, y, width - right_margin, y)
-    
-    
     
     # Save PDF
     c.save()
@@ -294,7 +277,6 @@ async def root():
 
 @app.post(
     "/generate-statement",
-    response_model=StatementResponse,
     tags=["Statement Generation"],
     summary="Generate invoice statement PDF"
 )
@@ -304,13 +286,13 @@ async def generate_statement(request: StatementRequest):
     
     - **client_name**: Name of the client receiving the statement
     - **company_name**: Name of the company issuing the statement
-    - **from_date**: Start date of the statement period
-    - **to_date**: End date of the statement period
+    - **from_date**: Start date of the statement period (as string)
+    - **to_date**: End date of the statement period (as string)
     - **invoices**: List of invoice items where:
+        - **date**: Invoice date (as string)
         - **activity**: URL for the invoice link
-        - **reference**: Display text for the link (e.g., "Invoice # INV-003")
-        - **date**: Invoice date
-        - **due_date**: Payment due date
+        - **reference**: Display text for the link (e.g., "INV 110")
+        - **due_date**: Payment due date (as string)
         - **invoice_amount**: Invoice amount
         - **payments**: Payments made (optional, defaults to 0)
     
@@ -320,18 +302,15 @@ async def generate_statement(request: StatementRequest):
         logger.info(f"Generating statement for {request.company_name}")
         
         # Calculate totals
-        today = date.today()
-        overdue = float(sum(
-            (inv.invoice_amount - inv.payments) 
-            for inv in request.invoices 
-            if inv.due_date < today
-        ))
-        current = float(sum(
-            (inv.invoice_amount - inv.payments) 
-            for inv in request.invoices 
-            if inv.due_date >= today
-        ))
-        total_due = overdue + current
+        overdue = Decimal("0.00")
+        current = Decimal("0.00")
+        
+        # Sum all invoices as overdue
+        for inv in request.invoices:
+            balance = inv.invoice_amount - inv.payments
+            overdue += balance
+        
+        total_due = float(overdue + current)
         
         # Generate PDF
         pdf_bytes = generate_statement_pdf(request)
@@ -363,24 +342,21 @@ async def preview_statement(request: StatementRequest):
     Returns totals and summary information.
     """
     try:
-        today = date.today()
-        overdue = float(sum(
-            (inv.invoice_amount - inv.payments) 
-            for inv in request.invoices 
-            if inv.due_date < today
-        ))
-        current = float(sum(
-            (inv.invoice_amount - inv.payments) 
-            for inv in request.invoices 
-            if inv.due_date >= today
-        ))
-        total_due = overdue + current
+        overdue = Decimal("0.00")
+        current = Decimal("0.00")
+        
+        # Sum all invoices
+        for inv in request.invoices:
+            balance = inv.invoice_amount - inv.payments
+            overdue += balance
+        
+        total_due = float(overdue + current)
         
         return StatementResponse(
             message="Statement preview generated successfully",
             total_due=round(total_due, 2),
-            overdue_amount=round(overdue, 2),
-            current_amount=round(current, 2),
+            overdue_amount=round(float(overdue), 2),
+            current_amount=round(float(current), 2),
             file_size=0
         )
     except Exception as e:
