@@ -119,10 +119,10 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     # Table column positions
     col_date = left_margin
-    col_activity = left_margin + 75
-    col_reference = left_margin + 150
-    col_due_date = left_margin + 240
-    col_invoice_amt = left_margin + 340
+    col_activity = left_margin + 100
+    col_reference = left_margin + 170
+    col_due_date = left_margin + 260
+    col_invoice_amt = left_margin + 360
     col_balance = left_margin + 440
     
     # Draw table headers
@@ -226,12 +226,6 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     
     # ============ PAYMENT DETAILS TABLE ============
     y -= 35
-    
-    # Top line before Customer
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(0.5)
-    c.setDash([])
-    c.line(320, y + 5, width - right_margin, y + 5)
     
     # Customer row
     c.setFont("Helvetica-Bold", 9)
