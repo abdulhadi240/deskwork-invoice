@@ -89,7 +89,7 @@ def generate_statement_pdf(data: StatementRequest) -> bytes:
     # ============ HEADER SECTION ============
     # Title "STATEMENT - Activity"
     c.setFont("Helvetica", 22)
-    c.drawString(left_margin, y, "OVER DUE STATEMENT")
+    c.drawString(left_margin, y, "ACCOUNT STATEMENT")
     
     # Right side header info
     c.setFont("Helvetica-Bold", 9)
